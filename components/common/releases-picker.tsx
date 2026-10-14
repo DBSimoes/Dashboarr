@@ -20,7 +20,10 @@ import {
 } from "@/components/common/filter-sort-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  SearchingIndicator,
+  SearchElapsed,
+} from "@/components/ui/searching-indicator";
 import { lightHaptic } from "@/lib/haptics";
 import { getHttpErrorMessage, isAbortError } from "@/lib/http-client";
 import { useModalFlow } from "@/hooks/use-modal-flow";
@@ -256,12 +259,18 @@ export function ReleasesPicker({
     [releaseFilters, selectedFilterId],
   );
 
-  const { data, isLoading, isError, error, isFetching, refetch, dataUpdatedAt } =
-    query;
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+    dataUpdatedAt,
+  } = query;
 
-  // Loading-time progression: skeletons until 8s, then contextual empty state
-  // with a "this can take up to a minute" hint, then a "still searching" hint
-  // past 30s.
+  // Loading-time progression: the searching state (with a m:ss counter) from
+  // the start, then a "still searching" hint and Restart past 30s.
   // searchEpoch bumps on a manual restart so the ticker resets even though
   // isFetching never flips across the cancel-and-refetch.
   const [elapsed, setElapsed] = useState(0);
@@ -270,10 +279,17 @@ export function ReleasesPicker({
     setElapsed(0);
     if (!isLoading && !isFetching) return;
     const start = Date.now();
-    const id = setInterval(() => {
-      setElapsed(Math.round((Date.now() - start) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
+    // Re-aim each tick at the next whole second: RN reschedules setInterval
+    // from when it actually fired, so it drifts late and the visible m:ss
+    // counter would skip a number about once a minute.
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const ms = Date.now() - start;
+      setElapsed(Math.floor(ms / 1000));
+      id = setTimeout(tick, 1000 - (ms % 1000));
+    };
+    id = setTimeout(tick, 1000);
+    return () => clearTimeout(id);
   }, [isLoading, isFetching, searchEpoch]);
 
   // "Tick" so the relative-time string in the status bar stays fresh once
@@ -317,7 +333,14 @@ export function ReleasesPicker({
     // with the quick chips, matching how the *arr web UI stacks them.
     if (selectedFilter) out = applyArrCustomFilter(out, selectedFilter);
     return sortReleases(out, sortKey);
-  }, [data, hideRejected, protocolFilter, qualityFilter, selectedFilter, sortKey]);
+  }, [
+    data,
+    hideRejected,
+    protocolFilter,
+    qualityFilter,
+    selectedFilter,
+    sortKey,
+  ]);
 
   // If every result was rejected and the user has hideRejected on, auto-flip
   // it once so they aren't staring at an empty list. Track that we did this
@@ -343,6 +366,9 @@ export function ReleasesPicker({
   // a fresh one — the in-app recovery for a hung search (#290).
   function handleRefresh() {
     lightHaptic();
+    // Reset here, not just in the ticker effect: that runs after paint, so the
+    // restarted search would flash the old m:ss count for a frame.
+    setElapsed(0);
     setSearchEpoch((e) => e + 1);
     refetch();
   }
@@ -417,9 +443,8 @@ export function ReleasesPicker({
     });
   }
 
-  const showSkeleton = (isLoading || isFetching) && !data;
-  const showSearchingMessage = showSkeleton && elapsed >= 8;
-  const showLongSearchingHint = showSkeleton && elapsed >= 30;
+  const isSearching = (isLoading || isFetching) && !data;
+  const showLongSearchingHint = isSearching && elapsed >= 30;
 
   return (
     <View className="flex-1">
@@ -430,7 +455,9 @@ export function ReleasesPicker({
             <>
               <Text className="text-zinc-300 text-sm font-medium">
                 {filtered.length}
-                {filtered.length !== data.length ? ` of ${data.length}` : ""}{" "}
+                {filtered.length !== data.length
+                  ? ` of ${data.length}`
+                  : ""}{" "}
                 result{data.length === 1 ? "" : "s"}
               </Text>
               {dataUpdatedAt > 0 && (
@@ -438,15 +465,9 @@ export function ReleasesPicker({
                   · {formatRelative(dataUpdatedAt)}
                 </Text>
               )}
-              {isFetching && (
-                <ActivityIndicator size="small" color="#3b82f6" />
-              )}
+              {isFetching && <ActivityIndicator size="small" color="#3b82f6" />}
             </>
-          ) : (
-            <Text className="text-zinc-500 text-sm">
-              {showSearchingMessage ? "Searching indexers…" : ""}
-            </Text>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -484,34 +505,30 @@ export function ReleasesPicker({
       )}
 
       {/* Body */}
-      {showSkeleton ? (
+      {isSearching ? (
         <View className="flex-1">
-          {showSearchingMessage ? (
-            <EmptyState
-              icon={<Icon icon={Search} size={28} color="#71717a" />}
-              title="Searching indexers…"
-              message={
-                showLongSearchingHint
-                  ? "Still searching. Some indexers are slower than others."
-                  : "This can take up to a minute."
-              }
-              action={
-                showLongSearchingHint ? (
+          <EmptyState
+            icon={<SearchingIndicator />}
+            iconClassName="mt-5 mb-8"
+            title="Searching indexers…"
+            message={
+              showLongSearchingHint
+                ? "Still searching. Some indexers are slower than others."
+                : "This can take up to a minute."
+            }
+            action={
+              <View className="items-center gap-4">
+                <SearchElapsed seconds={elapsed} />
+                {showLongSearchingHint ? (
                   <Button
                     label="Restart search"
                     variant="outline"
                     onPress={handleRefresh}
                   />
-                ) : undefined
-              }
-            />
-          ) : (
-            <View className="gap-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} height={88} borderRadius={16} />
-              ))}
-            </View>
-          )}
+                ) : null}
+              </View>
+            }
+          />
         </View>
       ) : isError ? (
         <EmptyState
@@ -522,7 +539,9 @@ export function ReleasesPicker({
             // so an AbortError landing here is always the fetch timeout.
             isAbortError(error)
               ? "Search timed out. Indexers may be slow or unreachable. Try again."
-              : (getHttpErrorMessage(error) ?? error?.message ?? "Unknown error")
+              : (getHttpErrorMessage(error) ??
+                error?.message ??
+                "Unknown error")
           }
           action={<Button label="Retry" onPress={handleRefresh} />}
         />
@@ -565,7 +584,9 @@ export function ReleasesPicker({
       />
 
       <ReleaseDetailSheet
-        release={flow.isOpen("detail") ? (flow.payload("detail") ?? null) : null}
+        release={
+          flow.isOpen("detail") ? (flow.payload("detail") ?? null) : null
+        }
         service={service}
         instanceId={instanceId}
         onClose={flow.close}

@@ -24,8 +24,10 @@
     "release:android:apk": "node scripts/release-android-apk.js",
     "release:android:play": "eas submit --platform android --profile production --path android/app/build/outputs/bundle/release/app-release.aab --non-interactive",
     "release:android": "pnpm build:android:prod && pnpm release:android:apk && pnpm release:android:play",
+    "release:android:promote": "node scripts/release-android-promote.js",
     "build:ios:prod": "node scripts/release-ios.js --no-upload",
-    "release:ios": "node scripts/release-ios.js"
+    "release:ios": "node scripts/release-ios.js",
+    "release:ios:submit": "node scripts/release-ios-submit.js"
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.7.1",

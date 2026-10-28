@@ -155,7 +155,19 @@ pnpm release:android:apk
 
 # Build + upload in one go
 pnpm release:android
+
+# Publish that build from Play's internal track (where release:android leaves it
+# as a draft) to production
+pnpm release:android:promote
+
+# iOS local build + upload to App Store Connect (TestFlight)
+pnpm release:ios
+
+# Create the App Store version, attach the uploaded build and submit it for review
+pnpm release:ios:submit
 ```
+
+The two publish steps ask for the release notes, print what they are about to change and wait for a confirmation before touching the store. For unattended runs pass `--notes-file <path>` and `--yes`; `--dry-run` only prints the plan.
 
 The `release:*` scripts require the [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated against the repo. The APK is read from `android/app/build/outputs/apk/release/app-release.apk` and uploaded to the tag `v<version>` from `package.json`.
 

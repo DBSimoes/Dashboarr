@@ -75,6 +75,7 @@ import {
   formatResolution,
 } from "@/lib/utils";
 import { useServiceImage } from "@/hooks/use-service-image";
+import { formatTagSummary } from "@/lib/arr-tag-input";
 import { imdbTitleUrl, openExternalUrl } from "@/lib/external-links";
 import { useModalFlow } from "@/hooks/use-modal-flow";
 import {
@@ -312,6 +313,7 @@ export default function SeriesDetailScreen() {
 
           <OptionsBlock
             series={series}
+            tagsRow={tags ? formatTagSummary(tagLabels) : undefined}
             onPress={() => setOptionsVisible(true)}
           />
 
@@ -694,11 +696,15 @@ function AboutRow({
 // Sonarr series options (issue #184): series type, season folders,
 // monitor-new-seasons. The whole card is one tap target — small per-row
 // targets are fiddly on phones — and opens the SeriesOptionsSheet editor.
+// The Tags row (#485) is hidden while `tagsRow` is undefined (tag list
+// unavailable).
 function OptionsBlock({
   series,
+  tagsRow,
   onPress,
 }: {
   series: SonarrSeries;
+  tagsRow?: string;
   onPress: () => void;
 }) {
   const typeLabel =
@@ -726,6 +732,7 @@ function OptionsBlock({
               value={series.monitorNewItems === "all" ? "All Seasons" : "None"}
             />
           ) : null}
+          {tagsRow != null ? <OptionRow label="Tags" value={tagsRow} /> : null}
         </View>
         <View className="ml-3 w-9 h-9 rounded-full bg-surface-light items-center justify-center">
           <Icon icon={Pencil} size={16} color="#a1a1aa" />
@@ -735,13 +742,18 @@ function OptionsBlock({
   );
 }
 
+// The label keeps its natural width and the value shrinks to one line: a tag
+// summary is user-typed and unbounded, and a flex-1 label would collapse to
+// zero width under a long one.
 function OptionRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-center">
-      <Text className="text-zinc-500 text-[0.65rem] uppercase font-semibold tracking-wider flex-1">
+      <Text className="text-zinc-500 text-[0.65rem] uppercase font-semibold tracking-wider grow">
         {label}
       </Text>
-      <Text className="text-zinc-300 text-xs ml-2">{value}</Text>
+      <Text className="text-zinc-300 text-xs ml-2 shrink" numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }

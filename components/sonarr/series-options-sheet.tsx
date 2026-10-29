@@ -1,13 +1,27 @@
 import { useEffect, useState } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { Modal, Platform, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { cssInterop } from "nativewind";
 import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import { Button } from "@/components/ui/button";
 import { SheetHeader } from "@/components/ui/sheet-header";
+import {
+  ArrTagPicker,
+  useArrTagPickerBottomOffset,
+} from "@/components/common/arr-tag-picker";
 import { useSheetBottomPadding } from "@/hooks/use-bottom-inset";
 import { SERIES_TYPE_OPTIONS } from "@/components/sonarr/add-series-sheet";
-import { useUpdateSeriesFields } from "@/hooks/use-sonarr";
+import { useSonarrTags, useUpdateSeriesFields } from "@/hooks/use-sonarr";
+import { sameTagIds } from "@/lib/arr-tag-input";
 import type { SonarrSeries, SonarrSeriesType } from "@/lib/types";
+
+// The tag picker's "New tag" input lives in this pageSheet, so it uses the
+// pageSheet keyboard pattern (KeyboardAwareScrollView), see CLAUDE.md.
+cssInterop(KeyboardAwareScrollView, {
+  className: "style",
+  contentContainerClassName: "contentContainerStyle",
+});
 
 const NEW_SEASONS_OPTIONS: {
   value: "all" | "none";
@@ -29,9 +43,10 @@ interface SeriesOptionsSheetProps {
   instanceId?: string;
 }
 
-// Editable Sonarr series options (issue #184). A dedicated sheet with
-// full-size Select/Toggle controls instead of small tappable rows; Save sends
-// all changed fields in a single PUT.
+// Editable Sonarr series options (issue #184) and tags (#485). A dedicated
+// sheet with full-size Select/Toggle controls instead of small tappable rows;
+// Save sends all changed fields in a single PUT, which replaces the series'
+// whole tag set.
 export function SeriesOptionsSheet({
   visible,
   onClose,
@@ -39,6 +54,7 @@ export function SeriesOptionsSheet({
   instanceId,
 }: SeriesOptionsSheetProps) {
   const updateFields = useUpdateSeriesFields(instanceId);
+  const { data: tags } = useSonarrTags(instanceId);
 
   const [seriesType, setSeriesType] = useState<SonarrSeriesType>(
     series.seriesType,
@@ -47,7 +63,10 @@ export function SeriesOptionsSheet({
   const [monitorNewItems, setMonitorNewItems] = useState(
     series.monitorNewItems,
   );
+  const [selectedTags, setSelectedTags] = useState<number[]>(series.tags ?? []);
+  const [tagBusy, setTagBusy] = useState(false);
   const scrollPadding = useSheetBottomPadding(32);
+  const keyboardBottomOffset = useArrTagPickerBottomOffset();
 
   // Re-seed from the server values whenever the sheet opens.
   useEffect(() => {
@@ -55,6 +74,7 @@ export function SeriesOptionsSheet({
     setSeriesType(series.seriesType);
     setSeasonFolder(series.seasonFolder);
     setMonitorNewItems(series.monitorNewItems);
+    setSelectedTags(series.tags ?? []);
   }, [visible, series]);
 
   const fields: Partial<SonarrSeries> = {};
@@ -63,10 +83,11 @@ export function SeriesOptionsSheet({
   if (monitorNewItems != null && monitorNewItems !== series.monitorNewItems) {
     fields.monitorNewItems = monitorNewItems;
   }
+  if (!sameTagIds(selectedTags, series.tags)) fields.tags = selectedTags;
   const dirty = Object.keys(fields).length > 0;
 
   const handleSave = () => {
-    if (!dirty) return;
+    if (!dirty || tagBusy) return;
     // Optimistic update keeps the Options card in sync immediately; on error
     // the hook rolls the caches back and shows a toast.
     updateFields.mutate({
@@ -87,9 +108,13 @@ export function SeriesOptionsSheet({
       <View className="flex-1 bg-background">
         <SheetHeader title="Series Options" onClose={onClose} />
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          className="flex-1"
           contentContainerClassName="px-4 py-4 pb-8"
           contentContainerStyle={scrollPadding}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          bottomOffset={keyboardBottomOffset}
         >
           {/* "Monitor New Seasons" only exists on Sonarr v4+ — hide otherwise. */}
           {series.monitorNewItems != null ? (
@@ -118,8 +143,22 @@ export function SeriesOptionsSheet({
             className="mb-4"
           />
 
-          <Button label="Save" onPress={handleSave} disabled={!dirty} />
-        </ScrollView>
+          <ArrTagPicker
+            service="sonarr"
+            instanceId={instanceId}
+            tags={tags}
+            selected={selectedTags}
+            onChange={setSelectedTags}
+            onBusyChange={setTagBusy}
+            className="mb-6"
+          />
+
+          <Button
+            label="Save"
+            onPress={handleSave}
+            disabled={!dirty || tagBusy}
+          />
+        </KeyboardAwareScrollView>
       </View>
     </Modal>
   );

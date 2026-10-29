@@ -7,9 +7,14 @@ import { TextInput } from "@/components/ui/text-input";
 import { Toggle } from "@/components/ui/toggle";
 import { Button } from "@/components/ui/button";
 import { SheetHeader } from "@/components/ui/sheet-header";
+import {
+  ArrTagPicker,
+  useArrTagPickerBottomOffset,
+} from "@/components/common/arr-tag-picker";
 import { useSheetBottomPadding } from "@/hooks/use-bottom-inset";
 import { MIN_AVAILABILITY_OPTIONS } from "@/components/radarr/add-movie-sheet";
-import { useUpdateMovieFields } from "@/hooks/use-radarr";
+import { useRadarrTags, useUpdateMovieFields } from "@/hooks/use-radarr";
+import { sameTagIds } from "@/lib/arr-tag-input";
 import type { RadarrMinimumAvailability } from "@/services/radarr-api";
 import type { RadarrMovie } from "@/lib/types";
 
@@ -30,8 +35,9 @@ interface MovieOptionsSheetProps {
 const DEFAULT_MIN_AVAILABILITY: RadarrMinimumAvailability = "released";
 
 // Editable Radarr movie options to match Radarr's Edit dialog (issue #216):
-// minimum availability + the movie's full folder path. A dedicated pageSheet
-// with full-size controls; Save sends all changed fields in a single PUT. The
+// minimum availability + the movie's full folder path, and its tags (#485). A
+// dedicated pageSheet with full-size controls; Save sends all changed fields in
+// a single PUT, which replaces the movie's whole tag set. The
 // "Move files on disk" toggle is the explicit, defaulted-off opt-in for the
 // destructive move — a separate confirm modal is intentionally avoided because
 // this plain pageSheet Modal must never chain into another modal on iOS
@@ -43,6 +49,7 @@ export function MovieOptionsSheet({
   instanceId,
 }: MovieOptionsSheetProps) {
   const updateFields = useUpdateMovieFields(instanceId);
+  const { data: tags } = useRadarrTags(instanceId);
 
   const [minimumAvailability, setMinimumAvailability] =
     useState<RadarrMinimumAvailability>(
@@ -51,7 +58,10 @@ export function MovieOptionsSheet({
     );
   const [path, setPath] = useState(movie.path ?? "");
   const [moveFiles, setMoveFiles] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<number[]>(movie.tags ?? []);
+  const [tagBusy, setTagBusy] = useState(false);
   const scrollPadding = useSheetBottomPadding(32);
+  const keyboardBottomOffset = useArrTagPickerBottomOffset();
 
   // Re-seed from the server values whenever the sheet opens.
   useEffect(() => {
@@ -62,6 +72,7 @@ export function MovieOptionsSheet({
     );
     setPath(movie.path ?? "");
     setMoveFiles(false);
+    setSelectedTags(movie.tags ?? []);
   }, [visible, movie]);
 
   const trimmedPath = path.trim();
@@ -74,10 +85,13 @@ export function MovieOptionsSheet({
   if (pathChanged && trimmedPath.length > 0) {
     fields.path = trimmedPath;
   }
+  if (!sameTagIds(selectedTags, movie.tags)) {
+    fields.tags = selectedTags;
+  }
   const dirty = Object.keys(fields).length > 0;
 
   const handleSave = () => {
-    if (!dirty) return;
+    if (!dirty || tagBusy) return;
     // Optimistic update keeps the Options card in sync immediately; on error the
     // hook rolls the caches back and shows a toast.
     updateFields.mutate({
@@ -105,7 +119,7 @@ export function MovieOptionsSheet({
           contentContainerStyle={scrollPadding}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-          bottomOffset={20}
+          bottomOffset={keyboardBottomOffset}
         >
           <Select
             label="Minimum Availability"
@@ -145,10 +159,20 @@ export function MovieOptionsSheet({
             </>
           ) : null}
 
+          <ArrTagPicker
+            service="radarr"
+            instanceId={instanceId}
+            tags={tags}
+            selected={selectedTags}
+            onChange={setSelectedTags}
+            onBusyChange={setTagBusy}
+            className="mt-4"
+          />
+
           <Button
             label="Save"
             onPress={handleSave}
-            disabled={!dirty}
+            disabled={!dirty || tagBusy}
             className="mt-6"
           />
         </KeyboardAwareScrollView>

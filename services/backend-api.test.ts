@@ -121,4 +121,11 @@ describe("pushConfigSnapshot", () => {
     await expect(pushConfigSnapshot()).rejects.toMatchObject({ status: 500 });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("skips in demo mode so the fake instances never replace the backend's", async () => {
+    setNotifications({});
+    mockConfigRef.current.demoMode = true;
+    await pushConfigSnapshot();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

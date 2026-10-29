@@ -263,9 +263,16 @@ export function deleteConfigBackup(deviceId: string): Promise<void> {
  * shape — see backend/dashboarr-backend/src/routes/config.ts — so a backend
  * that hasn't been upgraded yet won't reject this payload, it'll just
  * normalize legacy single-instance entries internally.
+ *
+ * Skipped in demo mode: the store then holds one fake instance per kind
+ * (`http://demo.local`, no secrets), and PUT /config replaces the backend's
+ * whole instance list, so a push would swap the user's real services out of
+ * every poller. disableDemoMode re-hydrates the real config, and that store
+ * change makes ConfigSyncBridge push it again.
  */
 export async function pushConfigSnapshot(): Promise<void> {
   const configState = useConfigStore.getState();
+  if (configState.demoMode) return;
 
   const instances = SERVICE_IDS.flatMap((kind) => {
     const list = configState.serviceInstances[kind] ?? [];

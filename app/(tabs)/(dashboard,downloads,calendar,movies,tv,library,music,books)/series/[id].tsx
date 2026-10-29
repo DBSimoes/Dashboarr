@@ -16,6 +16,7 @@ import {
   Film,
   Circle,
   FolderTree,
+  FolderSync,
   Pencil,
   History,
 } from "lucide-react-native";
@@ -65,6 +66,7 @@ import {
   useSonarrRootFolders,
   useUpdateSeriesRootFolder,
   useSonarrTags,
+  useRescanSeries,
 } from "@/hooks/use-sonarr";
 import { SERIES_TYPE_OPTIONS } from "@/components/sonarr/add-series-sheet";
 import { SeriesOptionsSheet } from "@/components/sonarr/series-options-sheet";
@@ -116,6 +118,7 @@ export default function SeriesDetailScreen() {
   const { data: rootFolders } = useSonarrRootFolders(instanceId);
   const updateRootFolder = useUpdateSeriesRootFolder(instanceId);
   const { data: tags } = useSonarrTags(instanceId);
+  const rescan = useRescanSeries(instanceId);
 
   const [optionsVisible, setOptionsVisible] = useState(false);
 
@@ -388,6 +391,15 @@ export default function SeriesDetailScreen() {
         {...flow.bind("actions")}
         title={series.title}
         actions={[
+          // Picks up episode files copied into the series folder by hand
+          // (#470). Non-destructive, so no confirm.
+          {
+            label: "Rescan folder",
+            subtitle: series.path,
+            icon: <Icon icon={FolderSync} size={18} color="#a1a1aa" />,
+            disabled: rescan.isPending,
+            onPress: () => rescan.mutate(series.id),
+          },
           {
             label: "Delete Show",
             icon: <Icon icon={Trash2} size={18} color="#ef4444" />,

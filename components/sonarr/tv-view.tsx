@@ -25,6 +25,7 @@ import {
 import { ServiceHeader } from "@/components/common/service-header";
 import { HealthIssuesBanner } from "@/components/services/health-issues-banner";
 import { QueueIssuesBanner } from "@/components/services/queue-issues-banner";
+import { FolderImportButton } from "@/components/services/folder-import-button";
 import { sonarrArrQueueAdapter } from "@/lib/arr-queue-adapters/sonarr";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner } from "@/components/common/error-banner";
@@ -337,10 +338,12 @@ export const TvView = memo(function TvView({
     <>
       {topSlot}
       <View className="flex-row items-center justify-between">
+        {/* flex-1 lets the instance name truncate before the actions clip. */}
         <ServiceHeader
           name="TV Shows"
           online={sonarrHealth?.online}
           serviceId="sonarr"
+          className="flex-1"
         />
         <View className="flex-row items-center">
           <Pressable
@@ -351,6 +354,7 @@ export const TvView = memo(function TvView({
           >
             <Icon icon={ScanSearch} size={ICON.LG} color="#a1a1aa" />
           </Pressable>
+          <FolderImportButton service="sonarr" />
           <Pressable
             onPress={() => router.push("/series/search")}
             className="p-2 active:opacity-70"

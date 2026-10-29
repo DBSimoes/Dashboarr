@@ -14,6 +14,7 @@ import { ScreenWrapper, useScreenBottomPadding } from "@/components/common/scree
 import { ServiceHeader } from "@/components/common/service-header";
 import { HealthIssuesBanner } from "@/components/services/health-issues-banner";
 import { QueueIssuesBanner } from "@/components/services/queue-issues-banner";
+import { FolderImportButton } from "@/components/services/folder-import-button";
 import { radarrArrQueueAdapter } from "@/lib/arr-queue-adapters/radarr";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -320,7 +321,13 @@ export const MoviesView = memo(function MoviesView({
     <>
       {topSlot}
       <View className="flex-row items-center justify-between">
-        <ServiceHeader name="Movies" online={radarrHealth?.online} serviceId="radarr" />
+        {/* flex-1 lets the instance name truncate before the actions clip. */}
+        <ServiceHeader
+          name="Movies"
+          online={radarrHealth?.online}
+          serviceId="radarr"
+          className="flex-1"
+        />
         <View className="flex-row items-center">
           {tab === "wanted" && (
             <Pressable
@@ -332,6 +339,7 @@ export const MoviesView = memo(function MoviesView({
               <Icon icon={ScanSearch} size={ICON.LG} color="#a1a1aa" />
             </Pressable>
           )}
+          <FolderImportButton service="radarr" />
           <Pressable
             onPress={() => router.push("/movie/search")}
             className="p-2 active:opacity-70"

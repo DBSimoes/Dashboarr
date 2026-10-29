@@ -4,6 +4,7 @@ import {
   autoRows,
   sonarrImportFiles,
   toSonarrCandidates,
+  type ArrImportMode,
   type SonarrManualImportFile,
 } from "@/lib/manual-import";
 import type {
@@ -235,6 +236,33 @@ export function getManualImportCandidates(
 }
 
 /**
+ * The import candidates in any folder on the Sonarr host (#470), for files
+ * copied there by hand. `filterExistingFiles: true` only drops files already
+ * recorded for the matched series (MediaFileService.FilterExistingFiles
+ * compares against its episode files' paths), so a new file in a series' own
+ * folder still shows, and after a copy import from a drop folder the same
+ * files are listed again on the next scan.
+ *
+ * Never add `seriesId` here: with a seriesId and no downloadId the controller
+ * returns that series' EXISTING files and ignores `folder` entirely
+ * (ManualImportController.GetMediaFiles). The scan walks the folder and parses
+ * every file, so it gets the interactive-search timeout and the caller's abort
+ * signal.
+ */
+export function getFolderImportCandidates(
+  folder: string,
+  instanceId?: string,
+  signal?: AbortSignal,
+): Promise<SonarrManualImportItem[]> {
+  return serviceRequest<SonarrManualImportItem[]>("sonarr", "/manualimport", {
+    params: { folder, filterExistingFiles: true },
+    timeout: INTERACTIVE_SEARCH_TIMEOUT,
+    instanceId,
+    signal,
+  });
+}
+
+/**
  * Every quality this instance knows. The manual-import screen offers these
  * when Sonarr parsed no quality off the file name, which is exactly the case
  * where the release is named in a way it can't read (#306).
@@ -250,16 +278,18 @@ export function getQualityDefinitions(
 /**
  * Issues the ManualImport command for already-built file payloads. The command
  * imports regardless of rejections, which is what makes it a *force*.
- * `importMode: "auto"` matches Sonarr's own default (copy vs. hardlink/move is
- * decided from the download client's setting).
+ * `importMode: "auto"` (the default) matches Sonarr's own download import:
+ * copy vs. hardlink/move follows the download client. A folder import must
+ * pass "move" or "copy" instead, see resolveImportMode in lib/manual-import.ts.
  */
 export function runManualImport(
   files: SonarrManualImportFile[],
   instanceId?: string,
+  importMode: ArrImportMode = "auto",
 ): Promise<void> {
   return serviceRequest<void>("sonarr", "/command", {
     method: "POST",
-    body: JSON.stringify({ name: "ManualImport", files, importMode: "auto" }),
+    body: JSON.stringify({ name: "ManualImport", files, importMode }),
     instanceId,
   });
 }
@@ -491,6 +521,23 @@ export function searchForSeries(
   return serviceRequest<void>("sonarr", "/command", {
     method: "POST",
     body: JSON.stringify({ name: "SeriesSearch", seriesId }),
+    instanceId,
+  });
+}
+
+// Rescans the series folder on disk (#470): drops records of files that are
+// gone and imports new episode files found in it, in place. Deliberately not
+// RefreshSeries (Sonarr's "Refresh & Scan" button): that refreshes metadata
+// first and then skips the scan when the instance's "Rescan Series Folder after
+// Refresh" is set to Never. RescanSeries scans unconditionally, but can only
+// map files to episodes Sonarr already knows about.
+export function rescanSeries(
+  seriesId: number,
+  instanceId?: string,
+): Promise<void> {
+  return serviceRequest<void>("sonarr", "/command", {
+    method: "POST",
+    body: JSON.stringify({ name: "RescanSeries", seriesId }),
     instanceId,
   });
 }

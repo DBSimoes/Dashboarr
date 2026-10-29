@@ -1,9 +1,13 @@
 import {
   autoRows,
+  countMatchedElsewhere,
+  hasUnknownTitle,
   seedMapping,
   qualityFromDefinition,
   qualityLabel,
   radarrImportFiles,
+  resolveImportMode,
+  seedForDestination,
   sonarrImportFiles,
   toRadarrCandidates,
   toSonarrCandidates,
@@ -195,6 +199,35 @@ describe("seedMapping", () => {
   });
 });
 
+// A folder holding two titles (#470): switching the destination must swap the
+// selection, never carry one title's file into the other.
+describe("seedForDestination", () => {
+  const alien = candidate({ id: 1, mediaId: 7, episodeIds: [42], size: 900 });
+  const heat = candidate({ id: 2, mediaId: 8, episodeIds: [88], size: 500 });
+  const unknown = candidate({ id: 3, mediaId: undefined, episodeIds: [], size: 100 });
+
+  it("selects only the files matched to the new destination", () => {
+    expect(seedForDestination([alien, heat, unknown], 8)).toEqual({
+      episodeIds: { 2: [88] },
+      included: { 2: true },
+    });
+  });
+
+  it("falls back to the largest unmatched file, never one matched elsewhere", () => {
+    expect(seedForDestination([alien, heat, unknown], 99)).toEqual({
+      episodeIds: {},
+      included: { 3: true },
+    });
+  });
+
+  it("selects nothing when every file belongs to another title", () => {
+    expect(seedForDestination([alien, heat], 99)).toEqual({
+      episodeIds: {},
+      included: {},
+    });
+  });
+});
+
 describe("sonarrImportFiles", () => {
   it("builds the command payload, with the caller's mapping winning", () => {
     const files = sonarrImportFiles(
@@ -243,6 +276,75 @@ describe("radarrImportFiles", () => {
       downloadId: "abc123",
     });
     expect(files[0]).not.toHaveProperty("episodeIds");
+  });
+});
+
+// A folder import (#470) has no download behind it: the per-file downloadId
+// must not reach the command at all, not even as an empty string.
+describe("folder import payloads", () => {
+  const row = { candidate: candidate(), mediaId: 11, quality: WEBDL, episodeIds: [42] };
+
+  it("leaves downloadId out of the Radarr payload", () => {
+    const [file] = JSON.parse(JSON.stringify(radarrImportFiles([row])));
+    expect(file).not.toHaveProperty("downloadId");
+    expect(file.movieId).toBe(11);
+  });
+
+  it("leaves downloadId out of the Sonarr payload", () => {
+    const [file] = JSON.parse(JSON.stringify(sonarrImportFiles([row])));
+    expect(file).not.toHaveProperty("downloadId");
+    expect(file.seriesId).toBe(11);
+  });
+});
+
+describe("resolveImportMode", () => {
+  const download = { kind: "download" as const, downloadId: "abc123" };
+  const folder = { kind: "folder" as const, folder: "/downloads/manual/" };
+
+  it("keeps auto for a download, whatever was picked", () => {
+    expect(resolveImportMode(download, undefined)).toBe("auto");
+    expect(resolveImportMode(download, "copy")).toBe("auto");
+  });
+
+  // Without a download-client item, "auto" MOVES on the server, so a folder
+  // import must carry the user's explicit choice.
+  it("sends the picked mode for a folder", () => {
+    expect(resolveImportMode(folder, "move")).toBe("move");
+    expect(resolveImportMode(folder, "copy")).toBe("copy");
+  });
+
+  it("refuses a folder import with no mode instead of falling back to auto", () => {
+    expect(() => resolveImportMode(folder, undefined)).toThrow();
+  });
+});
+
+describe("hasUnknownTitle", () => {
+  it("spots the rejection each service gives a title not in its library", () => {
+    const unknownMovie = candidate({ mediaId: undefined, rejections: ["Unknown Movie"] });
+    const unknownSeries = candidate({ mediaId: undefined, rejections: ["Unknown Series"] });
+    expect(hasUnknownTitle("radarr", [candidate(), unknownMovie])).toBe(true);
+    expect(hasUnknownTitle("sonarr", [unknownSeries])).toBe(true);
+    expect(hasUnknownTitle("radarr", [unknownSeries])).toBe(false);
+    expect(hasUnknownTitle("sonarr", [candidate({ rejections: ["Sample"] })])).toBe(false);
+  });
+});
+
+describe("countMatchedElsewhere", () => {
+  const onTarget = candidate({ id: 1, mediaId: 7 });
+  const other = candidate({ id: 2, mediaId: 8 });
+  const unmatched = candidate({ id: 3, mediaId: undefined });
+
+  it("counts files matched to another title that the import leaves out", () => {
+    expect(countMatchedElsewhere([onTarget, other, unmatched], 7, [])).toBe(1);
+  });
+
+  it("does not count a file the user mapped to the destination anyway", () => {
+    const rows = [{ candidate: other, mediaId: 7, quality: WEBDL, episodeIds: [] }];
+    expect(countMatchedElsewhere([onTarget, other], 7, rows)).toBe(0);
+  });
+
+  it("counts nothing before a destination is chosen", () => {
+    expect(countMatchedElsewhere([onTarget, other], undefined, [])).toBe(0);
   });
 });
 

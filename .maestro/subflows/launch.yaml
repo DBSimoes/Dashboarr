@@ -1,0 +1,49 @@
+# Brings up the Dev build connected to Metro and clears first-run overlays.
+# Restarts the app so a flow that failed with a modal open can't block the next.
+appId: com.dashboarr.app.dev
+---
+- launchApp:
+    permissions:
+      notifications: deny
+# A fresh dev client has no last-opened bundle and shows its launcher instead.
+# It lists Metro as localhost on iOS and as 10.0.2.2 on the Android emulator.
+- runFlow:
+    when:
+      visible: ".*:8081.*"
+    commands:
+      - tapOn: ".*:8081.*"
+# Either the tab bar or, outside Demo Mode, the first-run workspace intro.
+# A fresh install can stack two one-time overlays on top, in either order: the
+# notification prompt (on Android "deny" only revokes the permission, so the
+# app still asks) and the dev client's developer-menu intro.
+- extendedWaitUntil:
+    visible: "Dashboard|Skip|Don.t allow|.*developer menu.*"
+    timeout: 90000
+- repeat:
+    times: 2
+    commands:
+      - runFlow:
+          when:
+            visible: "Don.t allow"
+          commands:
+            - tapOn: "Don.t allow"
+      - runFlow:
+          when:
+            visible: ".*developer menu.*"
+          commands:
+            - tapOn: "Continue"
+      # On Android Continue leaves the full developer menu open.
+      - runFlow:
+          when:
+            visible: "Connected to:"
+            platform: Android
+          commands:
+            - pressKey: back
+- extendedWaitUntil:
+    visible: "Dashboard|Skip"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip"
+    commands:
+      - tapOn: "Skip"

@@ -1,0 +1,24 @@
+appId: com.dashboarr.app.dev
+name: Import from folder
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /manual-import-folder?service=radarr
+- assertVisible: "Import from folder"
+- tapOn: ".*Browse server.*"
+# "downloads" alone would also match the Downloads tab (matching ignores case),
+# which is below the folder list too, so bound it on both sides.
+- tapOn:
+    text: "downloads"
+    below: ".*Root folders.*"
+    above: "Scan this folder"
+- tapOn: "manual"
+- assertVisible: ".*No folders here.*"
+- tapOn: "Scan this folder"
+- assertVisible: "Manual import"
+- assertVisible: ".*furiosa.*\\.mkv.*"
+- tapOn: "Import 1 file"
+- tapOn: ".*Move files.*"
+- assertVisible: "Import started.*"

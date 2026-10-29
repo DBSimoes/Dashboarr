@@ -1,0 +1,20 @@
+appId: com.dashboarr.app.dev
+name: Query logs
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /adguard/queries
+- assertVisible: "Rewritten"
+- assertVisible: "Allowed"
+- tapOn: "Blocked"
+- assertVisible: ".*Blocklist"
+
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /pihole/queries
+- assertVisible: "Allowed"
+- tapOn: "Blocked"
+- assertVisible: ".*Blocklist"

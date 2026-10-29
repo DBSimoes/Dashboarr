@@ -1,0 +1,41 @@
+appId: com.dashboarr.app.dev
+name: Movies
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /movies
+- assertVisible: "Library"
+# Queue: Twisters is held by a delay profile (#484).
+- tapOn: "Queue"
+- assertVisible: "Twisters.*Delayed.*"
+
+# Demo Mode answers every /movie/:id with the same movie.
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /movie/1
+- assertVisible: ".*Dune: Part Two.*"
+- tapOn: "More"
+- tapOn: ".*Rescan folder.*"
+- assertVisible: "Rescan started.*"
+
+# Delete confirm offers a list exclusion (#472). Cancel, never confirm.
+- tapOn: "More"
+- tapOn: "Delete Movie"
+- tapOn: ".*Add list exclusion.*"
+- tapOn: "Cancel"
+- assertNotVisible: "Delete movie\\?"
+
+# Tag picker in Movie Options: create a tag and save (#485).
+- scrollUntilVisible:
+    element: "Edit movie options"
+- tapOn: "Edit movie options"
+- assertVisible: "Movie Options"
+- tapOn: ".*New tag.*"
+- inputText: "smoke-test"
+- tapOn: "Add Tag"
+- assertVisible: "smoke-test"
+- tapOn: "Save"
+- assertNotVisible: "Movie Options"

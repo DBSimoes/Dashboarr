@@ -1,0 +1,20 @@
+appId: com.dashboarr.app.dev
+name: Notifications
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /settings/notifications
+- assertVisible: "Movie grabbed"
+- assertVisible: "Episode grabbed"
+
+# Cleanuparr's push categories live in the per-instance editor (#486).
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /settings/integrations/cleanuparr
+- tapOn: ".*http://demo.local.*"
+- scrollUntilVisible:
+    element: "Download cleaned"
+- assertVisible: "Download removed"

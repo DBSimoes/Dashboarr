@@ -1,0 +1,24 @@
+appId: com.dashboarr.app.dev
+name: TV
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /tv
+- assertVisible: "House of the Drag.*"
+
+# S02E07 waits out a delay profile, so the progress card reads as held (#484).
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /series/1
+- assertVisible: ".*House of the Dragon.*"
+- assertVisible: ".*Delayed, not downloading yet.*"
+
+# Delete confirm offers a list exclusion (#472). Cancel, never confirm.
+- tapOn: "More"
+- tapOn: "Delete Show"
+- assertVisible: ".*Add list exclusion.*"
+- tapOn: "Cancel"
+- assertNotVisible: "Delete show\\?"

@@ -1,0 +1,10 @@
+appId: com.dashboarr.app.dev
+name: Activity
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /activity
+- assertVisible: ".*Active Streams.*"
+- assertVisible: ".*Dune: Part Two.*"

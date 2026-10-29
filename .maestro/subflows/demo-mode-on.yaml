@@ -1,0 +1,42 @@
+# Turns Demo Mode on through Settings > Backup unless it is already on.
+# Never use clearState in this suite: on a real phone the Dev build holds the
+# owner's real config and backend pairing.
+appId: com.dashboarr.app.dev
+---
+# Text matching is case-insensitive, so anchor on the banner's own copy rather
+# than "Demo Mode", which the Backup screen's toggle row also shows.
+- runFlow:
+    when:
+      notVisible: ".*Sample data only.*"
+    commands:
+      - runFlow:
+          file: open.yaml
+          env:
+            ROUTE: /settings/backup
+      # Outside Demo Mode a never-dismissed workspace intro covers the screen.
+      - runFlow:
+          when:
+            visible: "Skip"
+          commands:
+            - tapOn: "Skip"
+      - scrollUntilVisible:
+          element: "Demo Mode"
+      # The Switch has no label of its own. iOS exposes its value ("0" = off)
+      # as text; on Android it has none, but it is the only element there
+      # entirely right of the label.
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - tapOn:
+                text: "0"
+                rightOf: "Demo Mode"
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - tapOn:
+                rightOf: "Demo Mode"
+      - extendedWaitUntil:
+          visible: ".*Sample data only.*"
+          timeout: 10000

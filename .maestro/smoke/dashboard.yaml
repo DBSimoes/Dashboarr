@@ -1,0 +1,14 @@
+appId: com.dashboarr.app.dev
+name: Dashboard
+---
+- runFlow: ../subflows/start.yaml
+- runFlow:
+    file: ../subflows/open.yaml
+    env:
+      ROUTE: /dashboard
+- assertVisible: ".*qBittorrent.*"
+- assertVisible: ".*Radarr.*"
+# Releasing Soon draws the delay-profile hold on Twisters as a dashed row (#484).
+- scrollUntilVisible:
+    element: ".*Twisters.*"
+- assertVisible: ".*Releasing Soon.*"

@@ -1,0 +1,5 @@
+# `maestro test .maestro` runs every smoke flow. Subflows only run through runFlow.
+flows:
+  - smoke/*
+executionOrder:
+  continueOnFailure: true

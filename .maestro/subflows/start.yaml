@@ -1,0 +1,5 @@
+# Common start of every smoke flow: the app up, connected to Metro, in Demo Mode.
+appId: com.dashboarr.app.dev
+---
+- runFlow: launch.yaml
+- runFlow: demo-mode-on.yaml

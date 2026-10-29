@@ -1,0 +1,22 @@
+# Opens ROUTE (e.g. /movies) through the Dev build's scheme. iOS asks for
+# confirmation when the link comes from outside the app; Android opens it
+# directly.
+appId: com.dashboarr.app.dev
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - openLink: dashboarr-dev://${ROUTE}
+      - runFlow:
+          when:
+            visible: "Open in .*Dashboarr Dev.*"
+          commands:
+            - tapOn: "Open"
+# The Android Dev build keeps the prod "dashboarr" scheme: plugins/withDevVariant
+# only swaps the package id at Gradle time, so its manifest is the prod one.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - openLink: dashboarr://${ROUTE}

@@ -649,6 +649,46 @@ const DEMO_RADARR_CALENDAR = [
   { ...makeMovie(10, "Twisters", 2024, 1019237, false), inCinemas: daysFromNow(-7), digitalRelease: daysFromNow(5) },
 ];
 
+// The paged envelope both *arrs' /history answers with.
+function arrHistoryPage<T>(records: T[]) {
+  return { page: 1, pageSize: 50, totalRecords: records.length, records };
+}
+
+// Global /history, newest first. The poster map and the grab/import
+// notification watchers poll it, so without a fixture every poll failed. It
+// never changes, so the watchers only ever see their first-load baseline and
+// never notify. No downloadId, so nothing lands in the persisted poster cache.
+function makeRadarrHistoryRecord(
+  id: number,
+  eventType: "grabbed" | "downloadFolderImported",
+  movieId: number,
+  daysAgo: number,
+) {
+  const movie = DEMO_RADARR_MOVIES.find((m) => m.id === movieId)!;
+  const release = `${movie.title.replace(/:/g, "").replace(/\s/g, ".")}.${movie.year}.1080p.BluRay.x264-GROUP`;
+  return {
+    id,
+    eventType,
+    movieId,
+    sourceTitle: release,
+    date: daysFromNowFull(-daysAgo),
+    quality: { quality: { name: "Bluray-1080p" } },
+    languages: [{ id: 1, name: "English" }],
+    data:
+      eventType === "grabbed"
+        ? { indexer: "DemoTracker", releaseGroup: "GROUP", size: "14495514624", downloadClient: "qBittorrent", protocol: "torrent" }
+        : { downloadClient: "qBittorrent", importedPath: `/movies/${movie.title} (${movie.year})/${release}.mkv` },
+    movie,
+  };
+}
+
+const DEMO_RADARR_HISTORY = arrHistoryPage([
+  makeRadarrHistoryRecord(504, "downloadFolderImported", 1, 2),
+  makeRadarrHistoryRecord(503, "grabbed", 1, 2.1),
+  makeRadarrHistoryRecord(502, "downloadFolderImported", 2, 9),
+  makeRadarrHistoryRecord(501, "grabbed", 2, 9.1),
+]);
+
 // --- Sonarr ---
 
 function makeSeries(
@@ -894,6 +934,42 @@ const DEMO_SONARR_MANUAL_IMPORT = [
     ],
   },
 ];
+
+// Global /history, as DEMO_RADARR_HISTORY: polled, static, no downloadId.
+function makeSonarrHistoryRecord(
+  id: number,
+  eventType: "grabbed" | "downloadFolderImported",
+  episodeId: number,
+  daysAgo: number,
+) {
+  const episode = DEMO_SONARR_EPISODES.find((e) => e.id === episodeId)!;
+  const series = demoSeries(episode.seriesId);
+  const code = `S${String(episode.seasonNumber).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}`;
+  const release = `${series.title.replace(/\s/g, ".")}.${code}.1080p.WEB-DL.DDP5.1.H.264-NTb`;
+  return {
+    id,
+    eventType,
+    seriesId: series.id,
+    episodeId,
+    sourceTitle: release,
+    date: daysFromNowFull(-daysAgo),
+    quality: { quality: { name: "WEBDL-1080p" } },
+    languages: [{ id: 1, name: "English" }],
+    data:
+      eventType === "grabbed"
+        ? { indexer: "DemoTracker", releaseGroup: "NTb", size: "2684354560", downloadClient: "qBittorrent", protocol: "torrent" }
+        : { downloadClient: "qBittorrent", importedPath: `/tv/${series.title}/Season ${episode.seasonNumber}/${release}.mkv` },
+    series,
+    episode,
+  };
+}
+
+const DEMO_SONARR_HISTORY = arrHistoryPage([
+  makeSonarrHistoryRecord(604, "downloadFolderImported", 1206, 6),
+  makeSonarrHistoryRecord(603, "grabbed", 1206, 6.1),
+  makeSonarrHistoryRecord(602, "downloadFolderImported", 2206, 6.5),
+  makeSonarrHistoryRecord(601, "grabbed", 2206, 6.6),
+]);
 
 // --- Lidarr ---
 
@@ -3902,6 +3978,12 @@ export function getDemoResponse(
       if (normalized.startsWith("/queue")) return DEMO_RADARR_QUEUE;
       if (normalized.startsWith("/manualimport")) return DEMO_RADARR_MANUAL_IMPORT;
       if (normalized.startsWith("/wanted/missing")) return DEMO_RADARR_WANTED;
+      // Per-movie history is a plain array, not a page.
+      if (normalized === "/history/movie") {
+        const movieId = Number(params?.movieId);
+        return DEMO_RADARR_HISTORY.records.filter((r) => r.movieId === movieId);
+      }
+      if (normalized === "/history") return DEMO_RADARR_HISTORY;
       if (normalized.startsWith("/calendar")) return DEMO_RADARR_CALENDAR;
       if (normalized.startsWith("/qualitydefinition")) return DEMO_ARR_QUALITY_DEFINITIONS;
       if (normalized.startsWith("/qualityprofile")) return [{ id: 1, name: "HD-1080p" }, { id: 2, name: "Ultra-HD" }];
@@ -3922,6 +4004,12 @@ export function getDemoResponse(
       if (normalized === "/series/:id") return DEMO_SONARR_SERIES[0];
       if (normalized.startsWith("/calendar")) return DEMO_SONARR_CALENDAR;
       if (normalized.startsWith("/queue")) return DEMO_SONARR_QUEUE;
+      // Per-episode history filters the same paged endpoint by episodeId.
+      if (normalized === "/history") {
+        if (params?.episodeId === undefined) return DEMO_SONARR_HISTORY;
+        const episodeId = Number(params.episodeId);
+        return arrHistoryPage(DEMO_SONARR_HISTORY.records.filter((r) => r.episodeId === episodeId));
+      }
       if (normalized.startsWith("/manualimport")) return DEMO_SONARR_MANUAL_IMPORT;
       if (normalized.startsWith("/qualitydefinition")) return DEMO_ARR_QUALITY_DEFINITIONS;
       if (normalized.startsWith("/qualityprofile")) return [{ id: 1, name: "Any" }, { id: 2, name: "HD-1080p" }];

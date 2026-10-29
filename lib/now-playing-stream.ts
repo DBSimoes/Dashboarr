@@ -66,6 +66,12 @@ export interface NowPlayingStream {
   // The Activity tab makes a card expandable to show this; sources that don't
   // provide it leave it undefined.
   details?: StreamDetails;
+  // Identity of the media-server session behind this row, shared by every
+  // source that reports the same playback (Jellyfin/Emby /Sessions and
+  // JellyStat's /proxy/getSessions passthrough), so dedupeStreams can collapse
+  // them (#460). Left undefined by sources that can't tie a row to a server
+  // session (Plex, Tautulli, Tracearr, Navidrome); those rows are never merged.
+  sessionIdentity?: string;
 }
 
 // One decoded track row (video / audio / subtitle) for the per-stream detail.
@@ -323,6 +329,7 @@ export function mediaServerSessionToStream(
     key: `${serviceId}:${instanceId}:${session.Id}`,
     serviceId,
     instanceId,
+    sessionIdentity: mediaServerSessionIdentity(session),
     title,
     user: session.UserName,
     device: session.Client,
@@ -393,4 +400,76 @@ export function navidromeNowPlayingToStream(
     poster: getCoverArtSource(entry.coverArt, 300, instanceId),
     mediaType: "music",
   };
+}
+
+// --- One playback reported by several sources (#460) ---
+
+/**
+ * The server-scoped identity of a Jellyfin/Emby session, or undefined when the
+ * payload lacks either half.
+ *
+ * Session Id alone is not enough: Jellyfin derives it from Client + DeviceId,
+ * so one app on one device has the same Id on two servers. ServerId scopes it.
+ * The prefix is kind-neutral on purpose, since JellyStat can sit in front of
+ * either server and doesn't say which. NowPlayingItem.Id is left out: a session
+ * plays one item at a time, and keying on it would split the row for a poll
+ * when the two sources straddle an episode change.
+ */
+export function mediaServerSessionIdentity(
+  session: Pick<JellyfinSession, "Id" | "ServerId">,
+): string | undefined {
+  return session.ServerId && session.Id
+    ? `mediaserver:${session.ServerId}:${session.Id}`
+    : undefined;
+}
+
+// Which copy of a merged playback survives. A fresh copy always beats a stale
+// one (the last good snapshot of a source whose latest poll failed), so a
+// Jellyfin that loaded once and then became unreachable can't freeze a row the
+// JellyStat copy is still updating. Between equally fresh copies, JellyStat
+// passes the server's own SessionInfo through, so the native Jellyfin/Emby row
+// carries the same data plus artwork (JellyStat rows have no poster) and wins.
+function mergePriority(stream: NowPlayingStream, stale: boolean): number {
+  const native = stream.serviceId === "jellyfin" || stream.serviceId === "emby" ? 1 : 0;
+  return (stale ? 0 : 2) + native;
+}
+
+/**
+ * Collapse rows that share a sessionIdentity into one, keeping the highest
+ * priority copy (ties keep the first) in the slot of the first occurrence so
+ * the list doesn't reshuffle when the winner changes. Rows without an identity
+ * pass through untouched: there is no title/user/device matching, which could
+ * hide two genuinely different streams (#362). `isStale` marks rows from a
+ * source whose latest poll failed. `dropped` is how many rows were folded
+ * away, for callers that also sum per-source stream counts.
+ */
+export function dedupeStreams(
+  streams: NowPlayingStream[],
+  isStale: (stream: NowPlayingStream) => boolean = () => false,
+): {
+  streams: NowPlayingStream[];
+  dropped: number;
+} {
+  const out: NowPlayingStream[] = [];
+  const slotByIdentity = new Map<string, number>();
+  let dropped = 0;
+  for (const stream of streams) {
+    const identity = stream.sessionIdentity;
+    if (!identity) {
+      out.push(stream);
+      continue;
+    }
+    const slot = slotByIdentity.get(identity);
+    if (slot === undefined) {
+      slotByIdentity.set(identity, out.length);
+      out.push(stream);
+      continue;
+    }
+    dropped += 1;
+    const current = out[slot]!;
+    if (mergePriority(stream, isStale(stream)) > mergePriority(current, isStale(current))) {
+      out[slot] = stream;
+    }
+  }
+  return { streams: out, dropped };
 }

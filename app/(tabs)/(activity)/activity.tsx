@@ -33,6 +33,7 @@ import { lightHaptic } from "@/lib/haptics";
 import { POLLING_INTERVALS, ICON } from "@/lib/constants";
 import {
   getMonitorAdapter,
+  mergeMonitorActivity,
   type MonitorHistoryItem,
   type MonitorKind,
 } from "@/lib/monitor-adapter";
@@ -195,8 +196,9 @@ function ActiveStreams({
     return <ErrorBanner error={error} title="Failed to load active streams" />;
   }
 
-  const streams: NowPlayingStream[] = queries.flatMap((q) => q.data?.streams ?? []);
-  const streamCount = queries.reduce((acc, q) => acc + (q.data?.streamCount ?? 0), 0);
+  // Jellyfin/Emby and a JellyStat in front of the same server report every
+  // playback twice; fold those pairs into one row and off the count (#460).
+  const { streams, streamCount } = mergeMonitorActivity(queries);
   const bandwidthLabels = queries
     .map((q) => q.data?.bandwidthLabel)
     .filter((l): l is string => !!l);

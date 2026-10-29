@@ -7,6 +7,8 @@ import {
 import type { SonarrQueue, SonarrQueueItem, SonarrWantedMissing } from "@/lib/types";
 import type { ArrQueueAdapter } from "@/lib/arr-queue-adapter";
 import { fetchSonarrQueue } from "@/lib/arr-queue-query";
+import { isHeldQueueRecord, queueTileSubtitle } from "@/lib/arr-poster-status";
+import { formatEpisodeCode } from "@/lib/utils";
 import {
   queueImportBlocked,
   queueIssueMessages,
@@ -14,16 +16,16 @@ import {
   queueStatusLabel,
 } from "@/lib/arr-queue-issues";
 
-// "S02E05" when the episode is known, else the ETA, else nothing. Gives the
-// poster tile the episode context a series poster alone can't convey.
+// "S02E05" when the episode is known ("Delayed · S02E05" while Sonarr holds
+// it, #484), else the ETA (or "Delayed"), else nothing. Gives the poster tile
+// the episode context a series poster alone can't convey.
 function episodeSubtitle(item: SonarrQueueItem): string | undefined {
   const ep = item.episode;
-  if (ep && ep.seasonNumber != null && ep.episodeNumber != null) {
-    const s = String(ep.seasonNumber).padStart(2, "0");
-    const e = String(ep.episodeNumber).padStart(2, "0");
-    return `S${s}E${e}`;
-  }
-  return item.timeleft ? `ETA ${item.timeleft}` : undefined;
+  const code =
+    ep && ep.seasonNumber != null && ep.episodeNumber != null
+      ? formatEpisodeCode(ep.seasonNumber, ep.episodeNumber)
+      : undefined;
+  return queueTileSubtitle(item, code);
 }
 
 export const sonarrArrQueueAdapter: ArrQueueAdapter = {
@@ -53,6 +55,7 @@ export const sonarrArrQueueAdapter: ArrQueueAdapter = {
         subtitle: episodeSubtitle(item),
         qualityLabel: item.quality.quality.name,
         progress: item.size > 0 ? (item.size - item.sizeleft) / item.size : 0,
+        held: isHeldQueueRecord(item),
         detailPath: seriesId
           ? `/series/${seriesId}?instanceId=${instanceId}`
           : null,

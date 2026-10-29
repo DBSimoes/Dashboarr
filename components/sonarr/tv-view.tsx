@@ -71,10 +71,12 @@ import {
   sonarrBarProgress,
   sonarrIsMissing,
   sonarrEpisodeBarKind,
+  queueActivityMap,
 } from "@/lib/arr-poster-status";
 import { useServiceHealth } from "@/hooks/use-service-health";
 import { useInstanceTarget } from "@/hooks/use-instance-target";
 import { useRefreshOnDownloadComplete } from "@/hooks/use-refresh-on-download-complete";
+import { useHeldThroughSettle } from "@/hooks/use-arr-downloading-keys";
 import { usePullToRefresh } from "@/components/common/pull-to-refresh";
 import { CalendarEventRow } from "@/components/common/calendar-event-row";
 import { isSeasonPremiere, PREMIERE_BADGE } from "@/lib/season-premiere";
@@ -538,8 +540,9 @@ function SeriesLibrary({
   const { data: tags } = useSonarrTags();
   const router = useRouter();
 
-  const downloading = useMemo(
-    () => new Set((queue?.records ?? []).map((r) => r.seriesId)),
+  // Absent = not queued; "held" = only delay-profile holds, drawn dashed (#484).
+  const activity = useMemo(
+    () => queueActivityMap(queue?.records, (r) => r.seriesId),
     [queue],
   );
 
@@ -589,9 +592,10 @@ function SeriesLibrary({
       }}
       renderTags={renderTags}
       posterStatus={(s) => ({
-        barColor: BAR_KIND_COLOR[sonarrBarKind(s, downloading.has(s.id))],
+        barColor: BAR_KIND_COLOR[sonarrBarKind(s, activity.has(s.id))],
         cornerColor: cornerColorFor(s.status),
         progress: sonarrBarProgress(s),
+        held: activity.get(s.id) === "held",
       })}
       onItemPress={(s) => router.push(`/series/${s.id}`)}
       onItemLongPress={onLongPress}
@@ -612,10 +616,28 @@ function CalendarView({
   const { instanceId } = useInstanceTarget("sonarr");
   const router = useRouter();
 
-  const queuedEpisodeIds = useMemo(
-    () => new Set((queue?.records ?? []).map((r) => r.episodeId)),
+  // "held" episodes (delay-profile holds) draw dashed (#484). The refresh
+  // input below stays every queued id, held or not: only leaving the queue
+  // counts as a finished download.
+  const episodeActivity = useMemo(
+    () => queueActivityMap(queue?.records, (r) => r.episodeId),
     [queue],
   );
+  const queuedEpisodeIds = useMemo(
+    () => new Set(episodeActivity.keys()),
+    [episodeActivity],
+  );
+  const liveHeldIds = useMemo(
+    () =>
+      new Set(
+        [...episodeActivity]
+          .filter(([, state]) => state === "held")
+          .map(([id]) => id),
+      ),
+    [episodeActivity],
+  );
+  // Still dashed while a hold that just left the queue settles below.
+  const heldEpisodeIds = useHeldThroughSettle(queuedEpisodeIds, liveHeldIds);
 
   // `hasFile` only lives in the calendar payload, which nothing else
   // invalidates — without this an imported episode reverts from purple to red
@@ -676,6 +698,7 @@ function CalendarView({
                   badge={isSeasonPremiere(ep) ? PREMIERE_BADGE : undefined}
                   hasFile={ep.hasFile}
                   downloading={downloadingEpisodeIds.has(ep.id)}
+                  held={heldEpisodeIds.has(ep.id)}
                   barColor={
                     BAR_KIND_COLOR[
                       sonarrEpisodeBarKind(ep, downloadingEpisodeIds.has(ep.id))

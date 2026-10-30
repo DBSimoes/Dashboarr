@@ -1,0 +1,8 @@
+{
+  "snapshotCapturedAt": "2026-10-30T00:40:46.577Z",
+  "snapshotSha256": "2de78bd7b8e0c37d09faa02df5fad253cfe850bb4c240f24dbaf24dd586a323f",
+  "beforeCommit": "af878a06f36773c075976d4a81485187800c8f8e",
+  "afterCommit": "5e59cce62d7230a87b5aa3faad644c7c6f7205ec",
+  "sameRecordedResponse": true,
+  "assertionsPassed": true
+}

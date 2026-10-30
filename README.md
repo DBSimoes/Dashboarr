@@ -1,5 +1,5 @@
-# unRAID capacity fix: Android verification
+# unRAID capacity fix: before and after
 
-Screenshots of the focused fix on an Android 15 x86_64 emulator, using live unRAID 7.3.4 / API 4.37.6 storage data through a fixed read-only bridge. No credentials are included. Container data is stubbed empty; container management was outside this test.
+Android 15 x86_64 emulator screenshots use the same recorded unRAID 7.3.4 / API 4.37.6 response for both versions. Before uses the upstream mapper; after uses PR #505. Container data is stubbed empty and container management was not tested. The shared formatter's existing binary scaling and GB/TB labels are retained in both versions.
 
-These screenshots retain the existing shared byte formatter labels; correcting binary unit labels is a separate change.
+No API keys or hardware serial numbers are included.
